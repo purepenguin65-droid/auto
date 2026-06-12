@@ -9,13 +9,13 @@
 <body>
   <nav class="top-nav">
     <span class="top-nav__brand">News Intelligence</span>
-    <span class="top-nav__meta">최근 <span id="newsDays">7</span>일 · Google News RSS</span>
+    <span class="top-nav__meta">최근 <span id="newsDays">7</span>일 · Gemini AI 요약</span>
   </nav>
 
   <section class="hero-band-dark">
     <div class="hero-band-dark__inner">
       <h1>뉴스 이슈 수집</h1>
-      <p>키워드를 검색하면 최근 <span id="newsDaysHero">7</span>일 이내 주요 이슈를 자동으로 수집합니다. 핵심 기사를 구조화된 형태로 확인하세요.</p>
+      <p>키워드를 검색하면 최근 <span id="newsDaysHero">7</span>일 이내 주요 이슈를 수집하고 Gemini AI로 요약합니다.</p>
     </div>
   </section>
 
@@ -26,14 +26,35 @@
       <div class="search-panel">
         <form id="searchForm" class="search-row">
           <input type="text" id="keyword" class="text-input" placeholder="예: 인공지능, 반도체, 삼성전자" required>
-          <button type="submit" class="button-primary" id="btnSearch">검색</button>
+          <button type="submit" class="button-primary" id="btnSearch">검색 및 보고서 생성</button>
         </form>
-        <div class="loader" id="loader">뉴스 수집 중...</div>
+        <div class="loader" id="loader">뉴스 수집 및 Gemini 요약 생성 중...</div>
         <div class="status" id="status"></div>
       </div>
     </section>
 
     <section class="results-section" id="resultsSection" style="display:none;">
+      <div class="summary-section" id="summarySection" style="display:none;">
+        <div class="section-label">AI Summary</div>
+        <h2 class="section-title">Gemini 요약 보고서</h2>
+        <span class="summary-badge">Powered by Gemini 2.5 Flash Lite</span>
+        <div class="summary-panel">
+          <div class="summary-panel__label">종합 요약</div>
+          <p class="summary-panel__overview" id="summaryOverview"></p>
+        </div>
+        <div class="summary-issues" id="summaryIssues"></div>
+        <div class="report-actions" id="reportActions" style="display:none;">
+          <button type="button" class="button-secondary" id="btnPreviewReport">보고서 미리보기</button>
+          <button type="button" class="button-primary" id="btnDownloadReport">HTML 다운로드</button>
+        </div>
+      </div>
+
+      <div class="report-preview" id="reportPreview" style="display:none;">
+        <div class="section-label">Report</div>
+        <h2 class="section-title" id="reportSubject">보고서 미리보기</h2>
+        <iframe id="reportFrame" title="보고서 미리보기"></iframe>
+      </div>
+
       <div class="results-header">
         <h2 id="resultTitle">검색 결과</h2>
         <span class="filter-chip" id="resultBadge"></span>
@@ -55,6 +76,7 @@
     const status = document.getElementById('status');
     const resultsSection = document.getElementById('resultsSection');
     const results = document.getElementById('results');
+    let currentReport = null;
 
     async function loadConfig() {
       try {
@@ -79,7 +101,44 @@
       return div.innerHTML;
     }
 
+    function renderReport(data) {
+      currentReport = data.report_html ? data : null;
+      const actions = document.getElementById('reportActions');
+      const preview = document.getElementById('reportPreview');
+
+      if (!data.report_html) {
+        actions.style.display = 'none';
+        preview.style.display = 'none';
+        return;
+      }
+
+      actions.style.display = 'flex';
+      document.getElementById('reportSubject').textContent = data.subject || '보고서 미리보기';
+      document.getElementById('reportFrame').srcdoc = data.report_html;
+    }
+
+    function renderSummary(data) {
+      const section = document.getElementById('summarySection');
+      if (!data.summary) {
+        section.style.display = 'none';
+        return;
+      }
+      document.getElementById('summaryOverview').textContent = data.summary.overview || '';
+      const issues = data.summary.issues || [];
+      document.getElementById('summaryIssues').innerHTML = issues.length
+        ? issues.map((issue, i) => `
+            <div class="summary-issue">
+              <h3 class="summary-issue__title">${i + 1}. ${escapeHtml(issue.title)}</h3>
+              <p class="summary-issue__desc">${escapeHtml(issue.description)}</p>
+            </div>
+          `).join('')
+        : '';
+      section.style.display = 'block';
+    }
+
     function renderArticles(data) {
+      renderSummary(data);
+      renderReport(data);
       document.getElementById('resultTitle').textContent = `'${data.keyword}' 검색 결과`;
       document.getElementById('resultBadge').textContent = `최근 ${data.days}일 · ${data.count}건`;
 
@@ -117,17 +176,36 @@
       try {
         const fd = new FormData();
         fd.append('keyword', keyword);
+        fd.append('report', 'true');
         const res = await fetch('/api/search', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || '수집 실패');
         renderArticles(data);
-        showStatus(`'${keyword}' 관련 뉴스 ${data.count}건을 수집했습니다.`, 'success');
+        showStatus(`'${keyword}' 뉴스 ${data.count}건 수집 · AI 요약 · 보고서 생성 완료`, 'success');
       } catch (err) {
         showStatus(err.message, 'error');
       } finally {
         loader.classList.remove('show');
         document.getElementById('btnSearch').disabled = false;
       }
+    });
+
+    document.getElementById('btnPreviewReport').addEventListener('click', () => {
+      if (!currentReport) return;
+      const preview = document.getElementById('reportPreview');
+      preview.style.display = 'block';
+      preview.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('btnDownloadReport').addEventListener('click', () => {
+      if (!currentReport?.report_html) return;
+      const blob = new Blob([currentReport.report_html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report_${currentReport.keyword}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
     });
   </script>
 </body>

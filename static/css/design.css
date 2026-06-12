@@ -346,6 +346,112 @@ body {
   background: var(--surface-soft);
 }
 
+/* AI Summary */
+.summary-section {
+  margin-bottom: var(--spacing-section);
+}
+
+.summary-panel {
+  background: var(--surface-dark);
+  color: var(--on-dark);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.summary-panel__label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--on-dark-soft);
+  margin-bottom: var(--spacing-sm);
+}
+
+.summary-panel__overview {
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.55;
+  color: var(--on-dark);
+}
+
+.summary-issues {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
+}
+
+@media (max-width: 768px) {
+  .summary-issues { grid-template-columns: 1fr; }
+}
+
+.summary-issue {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  padding: var(--spacing-lg);
+}
+
+.summary-issue__title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--ink);
+  margin-bottom: var(--spacing-xs);
+}
+
+.summary-issue__desc {
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.55;
+  color: var(--body);
+}
+
+.summary-badge {
+  display: inline-block;
+  padding: 8px 14px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--spacing-md);
+}
+
+.report-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  margin-top: var(--spacing-lg);
+}
+
+.button-secondary {
+  height: 48px;
+  padding: 13px 31px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+
+.button-secondary:hover {
+  border-color: var(--ink);
+}
+
+.report-preview {
+  margin-bottom: var(--spacing-section);
+}
+
+.report-preview iframe {
+  width: 100%;
+  height: 700px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+}
+
 /* Footer */
 .footer {
   background: var(--surface-soft);
