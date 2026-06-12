@@ -19,8 +19,13 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+async def search_page(request: Request):
+    return templates.TemplateResponse(request, "search.html")
+
+
+@app.get("/report", response_class=HTMLResponse)
+async def report_page(request: Request):
+    return templates.TemplateResponse(request, "report.html")
 
 
 @app.get("/api/config")
@@ -140,14 +145,18 @@ async def api_search(
 @app.post("/api/search")
 async def api_search_post(
     keyword: str = Form(...),
-    summarize: bool = Form(default=True),
-    report: bool = Form(default=True),
+    summarize: str = Form(default="false"),
+    report: str = Form(default="false"),
 ):
     keyword = keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="키워드를 입력해 주세요.")
     try:
-        return JSONResponse(_search_response(keyword, summarize=summarize, with_report=report))
+        return JSONResponse(_search_response(
+            keyword,
+            summarize=summarize.lower() == "true",
+            with_report=report.lower() == "true",
+        ))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:

@@ -3,60 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>뉴스 이슈 수집</title>
+  <title>보고서 생성 · News Intelligence</title>
   <link rel="stylesheet" href="/static/css/design.css">
 </head>
 <body>
   <nav class="top-nav">
     <span class="top-nav__brand">News Intelligence</span>
-    <span class="top-nav__meta">최근 <span id="newsDays">7</span>일 · Gemini AI 요약</span>
+    <div class="top-nav__links">
+      <a href="/" class="nav-link">키워드 검색</a>
+      <a href="/report" class="nav-link nav-link--active">보고서 생성</a>
+      <span class="top-nav__meta">Gemini AI</span>
+    </div>
   </nav>
 
   <section class="hero-band-dark">
     <div class="hero-band-dark__inner">
-      <h1>뉴스 이슈 수집</h1>
-      <p>키워드를 검색하면 최근 <span id="newsDaysHero">7</span>일 이내 주요 이슈를 수집하고 Gemini AI로 요약합니다.</p>
+      <h1>보고서 생성</h1>
+      <p>키워드를 입력하면 최근 <span id="newsDaysHero">7</span>일 뉴스를 수집하고 Gemini AI로 분석한 HTML 보고서를 생성합니다.</p>
     </div>
   </section>
 
   <main class="content">
     <section>
-      <div class="section-label">Search</div>
-      <h2 class="section-title">키워드 검색</h2>
+      <div class="section-label">Report</div>
+      <h2 class="section-title">검색 및 보고서 생성</h2>
       <div class="search-panel">
-        <form id="searchForm" class="search-row">
+        <form id="reportForm" class="search-row">
           <input type="text" id="keyword" class="text-input" placeholder="예: 인공지능, 반도체, 삼성전자" required>
-          <button type="submit" class="button-primary" id="btnSearch">검색 및 보고서 생성</button>
+          <button type="submit" class="button-primary" id="btnGenerate">보고서 생성</button>
         </form>
-        <div class="loader" id="loader">뉴스 수집 및 Gemini 요약 생성 중...</div>
+        <div class="loader" id="loader">뉴스 수집 · Gemini 분석 · 보고서 작성 중...</div>
         <div class="status" id="status"></div>
       </div>
     </section>
 
     <section class="results-section" id="resultsSection" style="display:none;">
-      <div class="summary-section" id="summarySection" style="display:none;">
+      <div class="summary-section" id="summarySection">
         <div class="section-label">AI Summary</div>
-        <h2 class="section-title">Gemini 요약 보고서</h2>
+        <h2 class="section-title">Gemini 요약</h2>
         <span class="summary-badge">Powered by Gemini 2.5 Flash Lite</span>
         <div class="summary-panel">
           <div class="summary-panel__label">종합 요약</div>
           <p class="summary-panel__overview" id="summaryOverview"></p>
         </div>
         <div class="summary-issues" id="summaryIssues"></div>
-        <div class="report-actions" id="reportActions" style="display:none;">
-          <button type="button" class="button-secondary" id="btnPreviewReport">보고서 미리보기</button>
-          <button type="button" class="button-primary" id="btnDownloadReport">HTML 다운로드</button>
-        </div>
+      </div>
+
+      <div class="report-actions" id="reportActions">
+        <button type="button" class="button-secondary" id="btnPreviewReport">보고서 미리보기</button>
+        <button type="button" class="button-primary" id="btnDownloadReport">HTML 다운로드</button>
       </div>
 
       <div class="report-preview" id="reportPreview" style="display:none;">
-        <div class="section-label">Report</div>
+        <div class="section-label">Report Preview</div>
         <h2 class="section-title" id="reportSubject">보고서 미리보기</h2>
         <iframe id="reportFrame" title="보고서 미리보기"></iframe>
       </div>
 
-      <div class="results-header">
-        <h2 id="resultTitle">검색 결과</h2>
+      <div class="results-header" style="margin-top: 48px;">
+        <h2 id="resultTitle">수집 기사</h2>
         <span class="filter-chip" id="resultBadge"></span>
       </div>
       <div class="article-grid" id="results"></div>
@@ -65,64 +70,25 @@
 
   <footer class="footer">
     <div class="footer__inner">
-      <p>키워드 기반 뉴스 이슈 수집 서비스 · Google News RSS 데이터 소스</p>
+      <p>Gemini AI 기반 뉴스 이슈 보고서 생성 · Google News RSS</p>
       <p class="footer__copy">© 2026 News Intelligence. All rights reserved.</p>
     </div>
   </footer>
 
+  <script src="/static/js/common.js"></script>
   <script>
-    const form = document.getElementById('searchForm');
-    const loader = document.getElementById('loader');
-    const status = document.getElementById('status');
-    const resultsSection = document.getElementById('resultsSection');
-    const results = document.getElementById('results');
     let currentReport = null;
 
-    async function loadConfig() {
-      try {
-        const res = await fetch('/api/config');
-        if (!res.ok) return;
-        const cfg = await res.json();
-        document.getElementById('newsDays').textContent = cfg.news_days;
-        document.getElementById('newsDaysHero').textContent = cfg.news_days;
-      } catch (_) {}
+    async function initReportPage() {
+      await loadConfig(['newsDaysHero']);
+      const params = new URLSearchParams(location.search);
+      const q = params.get('keyword');
+      if (q) document.getElementById('keyword').value = q;
     }
-    loadConfig();
-    window.addEventListener('focus', loadConfig);
-
-    function showStatus(msg, type) {
-      status.textContent = msg;
-      status.className = 'status show ' + (type || '');
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    function renderReport(data) {
-      currentReport = data.report_html ? data : null;
-      const actions = document.getElementById('reportActions');
-      const preview = document.getElementById('reportPreview');
-
-      if (!data.report_html) {
-        actions.style.display = 'none';
-        preview.style.display = 'none';
-        return;
-      }
-
-      actions.style.display = 'flex';
-      document.getElementById('reportSubject').textContent = data.subject || '보고서 미리보기';
-      document.getElementById('reportFrame').srcdoc = data.report_html;
-    }
+    initReportPage();
 
     function renderSummary(data) {
-      const section = document.getElementById('summarySection');
-      if (!data.summary) {
-        section.style.display = 'none';
-        return;
-      }
+      if (!data.summary) return;
       document.getElementById('summaryOverview').textContent = data.summary.overview || '';
       const issues = data.summary.issues || [];
       document.getElementById('summaryIssues').innerHTML = issues.length
@@ -132,16 +98,22 @@
               <p class="summary-issue__desc">${escapeHtml(issue.description)}</p>
             </div>
           `).join('')
-        : '';
-      section.style.display = 'block';
+        : '<div class="empty-state">요약할 이슈가 없습니다.</div>';
+    }
+
+    function renderReport(data) {
+      currentReport = data;
+      document.getElementById('reportSubject').textContent = data.subject || '보고서 미리보기';
+      document.getElementById('reportFrame').srcdoc = data.html || '';
     }
 
     function renderArticles(data) {
       renderSummary(data);
       renderReport(data);
-      document.getElementById('resultTitle').textContent = `'${data.keyword}' 검색 결과`;
+      document.getElementById('resultTitle').textContent = `'${data.keyword}' 수집 기사`;
       document.getElementById('resultBadge').textContent = `최근 ${data.days}일 · ${data.count}건`;
 
+      const results = document.getElementById('results');
       if (!data.articles.length) {
         results.innerHTML = '<div class="empty-state">해당 기간에 수집된 뉴스가 없습니다.</div>';
       } else {
@@ -160,46 +132,50 @@
         `).join('');
       }
 
-      resultsSection.style.display = 'block';
-      resultsSection.scrollIntoView({ behavior: 'smooth' });
+      document.getElementById('resultsSection').style.display = 'block';
+      document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
     }
 
-    form.addEventListener('submit', async (e) => {
+    document.getElementById('reportForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const keyword = document.getElementById('keyword').value.trim();
       if (!keyword) return;
 
+      const loader = document.getElementById('loader');
+      const status = document.getElementById('status');
+      const btn = document.getElementById('btnGenerate');
+
       loader.classList.add('show');
       status.className = 'status';
-      document.getElementById('btnSearch').disabled = true;
+      btn.disabled = true;
+      document.getElementById('reportPreview').style.display = 'none';
 
       try {
         const fd = new FormData();
         fd.append('keyword', keyword);
-        fd.append('report', 'true');
-        const res = await fetch('/api/search', { method: 'POST', body: fd });
+        const res = await fetch('/api/report', { method: 'POST', body: fd });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || '수집 실패');
+        if (!res.ok) throw new Error(data.detail || '보고서 생성 실패');
         renderArticles(data);
-        showStatus(`'${keyword}' 뉴스 ${data.count}건 수집 · AI 요약 · 보고서 생성 완료`, 'success');
+        showStatus(status, `'${keyword}' 보고서 생성 완료 (${data.count}건)`, 'success');
       } catch (err) {
-        showStatus(err.message, 'error');
+        showStatus(status, err.message, 'error');
       } finally {
         loader.classList.remove('show');
-        document.getElementById('btnSearch').disabled = false;
+        btn.disabled = false;
       }
     });
 
     document.getElementById('btnPreviewReport').addEventListener('click', () => {
-      if (!currentReport) return;
+      if (!currentReport?.html) return;
       const preview = document.getElementById('reportPreview');
       preview.style.display = 'block';
       preview.scrollIntoView({ behavior: 'smooth' });
     });
 
     document.getElementById('btnDownloadReport').addEventListener('click', () => {
-      if (!currentReport?.report_html) return;
-      const blob = new Blob([currentReport.report_html], { type: 'text/html;charset=utf-8' });
+      if (!currentReport?.html) return;
+      const blob = new Blob([currentReport.html], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

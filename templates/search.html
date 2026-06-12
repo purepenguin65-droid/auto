@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>키워드 검색 · News Intelligence</title>
+  <link rel="stylesheet" href="/static/css/design.css">
+</head>
+<body>
+  <nav class="top-nav">
+    <span class="top-nav__brand">News Intelligence</span>
+    <div class="top-nav__links">
+      <a href="/" class="nav-link nav-link--active">키워드 검색</a>
+      <a href="/report" class="nav-link">보고서 생성</a>
+      <span class="top-nav__meta">최근 <span id="newsDays">7</span>일</span>
+    </div>
+  </nav>
+
+  <section class="hero-band-dark">
+    <div class="hero-band-dark__inner">
+      <h1>키워드 검색</h1>
+      <p>키워드를 입력하면 최근 <span id="newsDaysHero">7</span>일 이내 관련 뉴스를 수집합니다.</p>
+    </div>
+  </section>
+
+  <main class="content">
+    <section>
+      <div class="section-label">Search</div>
+      <h2 class="section-title">뉴스 수집</h2>
+      <div class="search-panel">
+        <form id="searchForm" class="search-row">
+          <input type="text" id="keyword" class="text-input" placeholder="예: 인공지능, 반도체, 삼성전자" required>
+          <button type="submit" class="button-primary" id="btnSearch">검색</button>
+        </form>
+        <div class="loader" id="loader">뉴스 수집 중...</div>
+        <div class="status" id="status"></div>
+      </div>
+    </section>
+
+    <section class="results-section" id="resultsSection" style="display:none;">
+      <div class="results-header">
+        <h2 id="resultTitle">검색 결과</h2>
+        <span class="filter-chip" id="resultBadge"></span>
+      </div>
+      <div class="report-actions" style="margin-bottom: 24px;">
+        <a href="#" class="button-primary" id="btnGoReport" style="display:none; text-decoration:none; text-align:center;">이 키워드로 보고서 생성 ›</a>
+      </div>
+      <div class="article-grid" id="results"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <p>키워드 기반 뉴스 이슈 수집 서비스 · Google News RSS</p>
+      <p class="footer__copy">© 2026 News Intelligence. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="/static/js/common.js"></script>
+  <script>
+    let lastKeyword = '';
+
+    async function initSearchPage() {
+      await loadConfig(['newsDays', 'newsDaysHero']);
+
+      const params = new URLSearchParams(location.search);
+      const q = params.get('keyword');
+      if (q) document.getElementById('keyword').value = q;
+    }
+    initSearchPage();
+
+    function renderArticles(data) {
+      lastKeyword = data.keyword;
+      document.getElementById('resultTitle').textContent = `'${data.keyword}' 검색 결과`;
+      document.getElementById('resultBadge').textContent = `최근 ${data.days}일 · ${data.count}건`;
+
+      const goReport = document.getElementById('btnGoReport');
+      goReport.href = `/report?keyword=${encodeURIComponent(data.keyword)}`;
+      goReport.style.display = data.count > 0 ? 'inline-block' : 'none';
+
+      const results = document.getElementById('results');
+      if (!data.articles.length) {
+        results.innerHTML = '<div class="empty-state">해당 기간에 수집된 뉴스가 없습니다.</div>';
+      } else {
+        results.innerHTML = data.articles.map((a, i) => `
+          <article class="model-card">
+            <div class="model-card-photo">
+              <span class="model-card-index">${String(i + 1).padStart(2, '0')}</span>
+            </div>
+            <div class="model-card-body">
+              <h3 class="model-card-title">${escapeHtml(a.title)}</h3>
+              <p class="model-card-meta">${escapeHtml(a.source)} · ${a.published}</p>
+              <p class="model-card-summary">${escapeHtml(a.summary || '요약 없음')}</p>
+              <a href="${a.link}" class="text-link" target="_blank" rel="noopener">기사 원문 보기</a>
+            </div>
+          </article>
+        `).join('');
+      }
+
+      document.getElementById('resultsSection').style.display = 'block';
+      document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const keyword = document.getElementById('keyword').value.trim();
+      if (!keyword) return;
+
+      const loader = document.getElementById('loader');
+      const status = document.getElementById('status');
+      const btn = document.getElementById('btnSearch');
+
+      loader.classList.add('show');
+      status.className = 'status';
+      btn.disabled = true;
+
+      try {
+        const fd = new FormData();
+        fd.append('keyword', keyword);
+        fd.append('summarize', 'false');
+        fd.append('report', 'false');
+        const res = await fetch('/api/search', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '수집 실패');
+        renderArticles(data);
+        showStatus(status, `'${keyword}' 관련 뉴스 ${data.count}건을 수집했습니다.`, 'success');
+      } catch (err) {
+        showStatus(status, err.message, 'error');
+      } finally {
+        loader.classList.remove('show');
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
