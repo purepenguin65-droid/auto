@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>뉴스 이슈 수집</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <nav class="top-nav">
+    <span class="brand">News Intelligence</span>
+    <span class="badge">최근 <span id="newsDays">7</span>일 · Gemini AI</span>
+  </nav>
+
+  <section class="hero">
+    <div class="hero__inner">
+      <h1>뉴스 이슈 수집</h1>
+      <p>키워드를 검색하면 최근 <span id="newsDaysHero">7</span>일 뉴스를 수집하고, Gemini AI가 <strong>한 장 요약 보고서</strong>를 생성합니다.</p>
+    </div>
+  </section>
+
+  <main class="content">
+    <div class="section-label">Search</div>
+    <h2 class="section-title">키워드 검색</h2>
+
+    <div class="search-box">
+      <form id="searchForm">
+        <div class="search-row">
+          <input type="text" id="keyword" class="input" placeholder="예: 인공지능, 반도체, 삼성전자" required autofocus>
+          <button type="submit" class="btn" id="btnSearch">검색</button>
+          <button type="button" class="btn-secondary" id="btnReport">한 장 요약 보고서</button>
+          <button type="button" class="btn" id="btnReportSend">생성 후 이메일 발송</button>
+        </div>
+        <div class="email-row">
+          <label for="email">수신 이메일</label>
+          <input type="email" id="email" class="input" placeholder="비워두면 .env의 EMAIL_TO 사용">
+        </div>
+      </form>
+      <div class="loader" id="loader"></div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <section class="report-section" id="reportSection" style="display:none;">
+      <div class="section-label">One Page Brief</div>
+      <h2 class="section-title" id="reportHeadline">한 장 요약 보고서</h2>
+      <span class="gemini-badge" id="geminiBadge">Gemini 2.5 Flash Lite</span>
+
+      <div class="summary-panel">
+        <div class="summary-panel__label">종합 요약</div>
+        <p class="summary-panel__text" id="summaryOverview"></p>
+      </div>
+
+      <div class="one-page-points" id="summaryPoints"></div>
+
+      <div class="summary-panel outlook-panel" id="outlookPanel" style="display:none;">
+        <div class="summary-panel__label">향후 전망</div>
+        <p class="summary-panel__text" id="summaryOutlook"></p>
+      </div>
+
+      <div class="report-actions">
+        <button type="button" class="btn-secondary" id="btnPreview">한 장 보고서 미리보기</button>
+        <button type="button" class="btn" id="btnDownload">HTML 다운로드</button>
+        <button type="button" class="btn" id="btnSend">이메일 발송</button>
+      </div>
+
+      <div class="report-preview" id="reportPreview" style="display:none;">
+        <iframe id="reportFrame" title="한 장 보고서 미리보기"></iframe>
+      </div>
+    </section>
+
+    <section class="results" id="resultsSection" style="display:none;">
+      <div class="results-header">
+        <h2 id="resultTitle">검색 결과</h2>
+        <span class="count-chip" id="resultBadge"></span>
+      </div>
+      <div class="article-list" id="results"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Google News RSS · Gemini AI 요약 보고서
+  </footer>
+
+  <script>
+    let currentReport = null;
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+        document.getElementById('newsDays').textContent = cfg.news_days;
+        document.getElementById('newsDaysHero').textContent = cfg.news_days;
+        if (cfg.gemini_model) {
+          document.getElementById('geminiBadge').textContent = cfg.gemini_model;
+        }
+        if (cfg.default_email) {
+          document.getElementById('email').placeholder = cfg.default_email;
+          document.getElementById('email').value = cfg.default_email;
+        }
+      } catch (_) {}
+    }
+    loadConfig();
+    window.addEventListener('focus', loadConfig);
+
+    function escapeHtml(text) {
+      const d = document.createElement('div');
+      d.textContent = text;
+      return d.innerHTML;
+    }
+
+    function showStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status show ' + type;
+    }
+
+    function setLoading(on, text) {
+      const loader = document.getElementById('loader');
+      loader.textContent = text || '';
+      loader.classList.toggle('show', on);
+      ['btnSearch', 'btnReport', 'btnReportSend', 'btnSend'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = on;
+      });
+    }
+
+    function getEmail() {
+      return document.getElementById('email').value.trim();
+    }
+
+    function renderArticles(data) {
+      document.getElementById('resultTitle').textContent = `'${data.keyword}' 검색 결과`;
+      document.getElementById('resultBadge').textContent = `최근 ${data.days}일 · ${data.count}건`;
+
+      const container = document.getElementById('results');
+      if (!data.articles.length) {
+        container.innerHTML = '<div class="empty">해당 기간에 수집된 뉴스가 없습니다.</div>';
+      } else {
+        container.innerHTML = data.articles.map((a, i) => `
+          <article class="article">
+            <div class="article__num">ISSUE ${String(i + 1).padStart(2, '0')}</div>
+            <h3 class="article__title">${escapeHtml(a.title)}</h3>
+            <p class="article__meta">${escapeHtml(a.source)} · ${a.published}</p>
+            <p class="article__summary">${escapeHtml(a.summary || '요약 없음')}</p>
+            <a href="${a.link}" class="article__link" target="_blank" rel="noopener">기사 원문 보기 ›</a>
+          </article>
+        `).join('');
+      }
+      document.getElementById('resultsSection').style.display = 'block';
+    }
+
+    function renderReport(data) {
+      currentReport = data;
+      const summary = data.summary || {};
+      document.getElementById('reportHeadline').textContent = summary.headline || `'${data.keyword}' 한 장 요약`;
+      document.getElementById('summaryOverview').textContent = summary.overview || '';
+
+      const points = summary.key_points || [];
+      document.getElementById('summaryPoints').innerHTML = points.length
+        ? `<div class="section-label" style="margin-bottom:12px;">핵심 이슈</div><ul class="points-list">${
+            points.map(p => `<li>${escapeHtml(p)}</li>`).join('')
+          }</ul>`
+        : '';
+
+      const outlook = summary.outlook || '';
+      const outlookPanel = document.getElementById('outlookPanel');
+      if (outlook) {
+        document.getElementById('summaryOutlook').textContent = outlook;
+        outlookPanel.style.display = 'block';
+      } else {
+        outlookPanel.style.display = 'none';
+      }
+
+      document.getElementById('reportFrame').srcdoc = data.html || '';
+      document.getElementById('reportPreview').style.display = 'block';
+      document.getElementById('reportSection').style.display = 'block';
+      document.getElementById('resultsSection').style.display = 'none';
+      document.getElementById('reportSection').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const keyword = document.getElementById('keyword').value.trim();
+      if (!keyword) return;
+
+      setLoading(true, '뉴스 수집 중...');
+      document.getElementById('status').className = 'status';
+      document.getElementById('reportSection').style.display = 'none';
+
+      try {
+        const fd = new FormData();
+        fd.append('keyword', keyword);
+        const res = await fetch('/api/search', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '수집 실패');
+        renderArticles(data);
+        showStatus(`'${keyword}' 관련 뉴스 ${data.count}건을 수집했습니다.`, 'success');
+        document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+      } catch (err) {
+        showStatus(err.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    document.getElementById('btnReport').addEventListener('click', async () => {
+      const keyword = document.getElementById('keyword').value.trim();
+      if (!keyword) { showStatus('키워드를 입력해 주세요.', 'error'); return; }
+
+      setLoading(true, '뉴스 수집 · Gemini 분석 · 보고서 생성 중...');
+      document.getElementById('status').className = 'status';
+
+      try {
+        const fd = new FormData();
+        fd.append('keyword', keyword);
+        const res = await fetch('/api/report', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '보고서 생성 실패');
+        renderReport(data);
+        showStatus(`'${keyword}' 한 장 요약 보고서 생성 완료`, 'success');
+      } catch (err) {
+        showStatus(err.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    document.getElementById('btnPreview').addEventListener('click', () => {
+      document.getElementById('reportPreview').style.display = 'block';
+      document.getElementById('reportPreview').scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('btnDownload').addEventListener('click', () => {
+      if (!currentReport?.html) return;
+      const blob = new Blob([currentReport.html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report_${currentReport.keyword}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    async function sendEmail() {
+      if (!currentReport?.html) {
+        showStatus('먼저 보고서를 생성해 주세요.', 'error');
+        return;
+      }
+      setLoading(true, '이메일 발송 중...');
+      try {
+        const fd = new FormData();
+        fd.append('subject', currentReport.subject);
+        fd.append('html', currentReport.html);
+        fd.append('email', getEmail());
+        const res = await fetch('/api/send', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '발송 실패');
+        showStatus(data.message, 'success');
+      } catch (err) {
+        showStatus(err.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    document.getElementById('btnSend').addEventListener('click', sendEmail);
+
+    document.getElementById('btnReportSend').addEventListener('click', async () => {
+      const keyword = document.getElementById('keyword').value.trim();
+      if (!keyword) { showStatus('키워드를 입력해 주세요.', 'error'); return; }
+
+      setLoading(true, '보고서 생성 · 이메일 발송 중...');
+      document.getElementById('status').className = 'status';
+
+      try {
+        const fd = new FormData();
+        fd.append('keyword', keyword);
+        fd.append('email', getEmail());
+        const res = await fetch('/api/report-and-send', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '처리 실패');
+        renderReport(data);
+        showStatus(data.message, 'success');
+      } catch (err) {
+        showStatus(err.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    });
+  </script>
+</body>
+</html>
